@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>线轴盘具计算</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1a1c1e;--bg2:#22262b;--bg3:#2c3038;--bg4:#333840;
+  --border:#3d444e;--border2:#4a5260;
+  --text:#e8eaed;--text2:#9aa0ab;--text3:#5f6672;
+  --accent:#f0a500;--green:#3dba7a;--green-bg:#142b22;--red:#e05555;
+  --mono:"Consolas","Courier New",monospace;
+}
+html,body{height:100%;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:16px}
+
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:62px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20}
+.topbar-icon{width:34px;height:34px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.topbar-title{font-size:20px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
+.topbar-sep{width:1px;height:22px;background:var(--border);margin:0 4px}
+.topbar-sub{font-size:14px;color:var(--text3);letter-spacing:.04em}
+.drawer-toggle{display:none;margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text2);width:40px;height:40px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0}
+
+.shell{display:flex;height:calc(100vh - 62px);position:relative;overflow:hidden}
+
+.overlay{display:none;position:fixed;inset:0;top:62px;background:rgba(0,0,0,.55);z-index:29}
+.overlay.open{display:block}
+
+.sidebar{width:270px;min-width:270px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;transition:transform .25s ease}
+
+.s-sec{border-bottom:1px solid var(--border);padding:16px 18px}
+.s-lbl{font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:12px;font-family:var(--mono)}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:13px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
+.field input{width:100%;height:40px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:15px;font-family:var(--mono);padding:0 12px;outline:none;transition:border-color .15s}
+.field input:focus{border-color:var(--accent)}
+.field input::placeholder{color:var(--text3);font-size:13px}
+.field .hint{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:4px}
+
+.run-btn{width:100%;height:44px;background:var(--accent);color:#111;border:none;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;font-family:var(--mono)}
+.run-btn:active{opacity:.85}
+.rst-btn{width:100%;height:36px;margin-top:8px;background:transparent;color:var(--text3);border:1px solid var(--border);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;font-family:var(--mono)}
+.rst-btn:hover{border-color:var(--border2);color:var(--text2)}
+.err{font-size:11px;color:var(--red);font-family:var(--mono);margin-top:8px;min-height:14px;line-height:1.4}
+
+.formula-box{font-size:11px;color:var(--text3);font-family:var(--mono);line-height:2}
+.formula-box span{color:var(--text2)}
+
+.sidebar-foot{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border)}
+.sidebar-foot p{font-size:11px;color:var(--text3);font-family:var(--mono);line-height:1.7}
+
+.main{flex:1;overflow-y:auto;background:var(--bg);display:flex;flex-direction:column;min-width:0}
+
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);flex-shrink:0}
+.metric{padding:14px 18px;border-right:1px solid var(--border)}
+.metric:last-child{border-right:none}
+.m-lbl{font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:var(--mono)}
+.m-val{font-size:24px;font-weight:700;font-family:var(--mono);color:var(--accent);line-height:1}
+.m-unit{font-size:12px;color:var(--text3);margin-left:3px;font-family:var(--mono)}
+
+.tbl-wrap{overflow-x:auto;flex:1}
+table{width:100%;border-collapse:collapse;font-size:14px;font-family:var(--mono)}
+thead th{background:var(--bg2);color:var(--text3);font-size:14px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:11px 16px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:1}
+tbody td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap;vertical-align:middle}
+tbody tr:hover td{background:var(--bg3);color:var(--text)}
+tbody tr.hl td{background:var(--green-bg);color:var(--green)}
+tbody tr.hl td:first-child{border-left:2px solid var(--green)}
+.spool-n{color:var(--text);font-size:14px}
+.tag-r{display:inline-block;font-size:10px;padding:2px 7px;background:transparent;color:var(--green);border:1px solid var(--green);letter-spacing:.04em;margin-left:8px;vertical-align:middle}
+.v-acc{color:var(--accent);font-size:15px}
+.v-zer{color:var(--text3)}
+
+.empty-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.empty-ring{width:60px;height:60px;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center}
+.empty-txt{font-size:12px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2)}
+
+/* ── 手机端抽屉模式 ── */
+@media(max-width:700px){
+  .drawer-toggle{display:flex}
+  .topbar-sep,.topbar-sub{display:none}
+  .sidebar{
+    position:fixed;top:62px;left:0;
+    height:calc(100vh - 62px);
+    z-index:30;
+    transform:translateX(-100%);
+  }
+  .sidebar.open{transform:translateX(0)}
+  .main{width:100%}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .metric:nth-child(2){border-right:none}
+  .metric:nth-child(3){border-top:1px solid var(--border)}
+  .metric:nth-child(4){border-top:1px solid var(--border);border-right:none}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-icon">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="5.5" stroke="#111" stroke-width="1.4"/>
+      <circle cx="8" cy="8" r="1.8" fill="#111"/>
+      <line x1="8" y1="2.5" x2="8" y2="4.5" stroke="#111" stroke-width="1.4"/>
+      <line x1="8" y1="11.5" x2="8" y2="13.5" stroke="#111" stroke-width="1.4"/>
+      <line x1="2.5" y1="8" x2="4.5" y2="8" stroke="#111" stroke-width="1.4"/>
+      <line x1="11.5" y1="8" x2="13.5" y2="8" stroke="#111" stroke-width="1.4"/>
+    </svg>
+  </div>
+  <span class="topbar-title">线缆盘具计算</span>
+  <div class="topbar-sep"></div>
+  <span class="topbar-sub">津达缆线盘具计算 &nbsp;|&nbsp; 共计：19 种规格</span>
+  <button class="drawer-toggle" id="drawerBtn" onclick="toggleDrawer()" aria-label="输入参数">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="s-sec">
+      <div class="s-lbl">输入参数</div>
+      <div class="field">
+        <label>线缆外径</label>
+        <input type="number" id="diam" placeholder="10mm" min="0.1" step="0.1" inputmode="decimal">
+        <div class="hint">单位 mm</div>
+      </div>
+      <div class="field">
+        <label>线缆长度 <span style="color:var(--border2)">[可选]</span></label>
+        <input type="number" id="target" placeholder="空 = 显示全部" min="1" step="1" inputmode="decimal">
+        <div class="hint">单位 m</div>
+      </div>
+      <div class="field">
+        <label>容积系数</label>
+        <input type="number" id="ff" value="0.95" min="0.5" max="1" step="0.01" inputmode="decimal">
+        <div class="hint">范围 0.50 ~ 1.00</div>
+      </div>
+    </div>
+
+    <div class="s-sec">
+      <button class="run-btn" onclick="calcAndClose()">&#9654;&nbsp; 开始计算</button>
+      <button class="rst-btn" onclick="resetAll()">重置</button>
+      <div id="err" class="err"></div>
+    </div>
+
+    <div class="s-sec" id="formula-sec" style="display:none">
+      <div class="s-lbl">公式明细</div>
+      <div class="formula-box">
+        <div>y₁ = <span>round(d × 1.5)</span></div>
+        <div>cs = <span>⌊(D1−D2−2y₁)/(2d)⌋</span></div>
+        <div>qs = <span>⌊ff × L2 / d⌋</span></div>
+        <div>D̄  = <span>D2 + cs × d</span></div>
+        <div>L  = <span>π×cs×qs×D̄ / 1000</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-foot">
+      <p>默认容积系数: 0.95<br>按 Enter 直接计算</p>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="empty-wrap" id="empty">
+      <div class="empty-ring">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="8" stroke="#4a5260" stroke-width="1.2"/>
+          <circle cx="12" cy="12" r="3" stroke="#4a5260" stroke-width="1.2"/>
+          <line x1="12" y1="4" x2="12" y2="7" stroke="#4a5260" stroke-width="1.2"/>
+          <line x1="12" y1="17" x2="12" y2="20" stroke="#4a5260" stroke-width="1.2"/>
+          <line x1="4" y1="12" x2="7" y2="12" stroke="#4a5260" stroke-width="1.2"/>
+          <line x1="17" y1="12" x2="20" y2="12" stroke="#4a5260" stroke-width="1.2"/>
+        </svg>
+      </div>
+      <div class="empty-txt">点击右上角菜单输入参数</div>
+      <div class="empty-txt">用津达线缆 做放心工程</div>
+    </div>
+    <div id="result" style="display:none;flex-direction:column;flex:1">
+      <div class="metrics" id="metrics"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>盘具</th><th>容量</th>
+            <th>层数</th><th>圈数</th><th>容积</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const SP=[
+  {n:"木轴×600",    D1:600,  D2:350,  L2:400},
+  {n:"木轴×700",    D1:700,  D2:350,  L2:390},
+  {n:"木轴×800",    D1:800,  D2:350,  L2:510},
+  {n:"木轴×1米",    D1:1000, D2:400,  L2:580},
+  {n:"木轴×1.2米",  D1:1200, D2:520,  L2:400},
+  {n:"铁木×1.4米",  D1:1400, D2:660,  L2:680},
+  {n:"铁木×1.6米",  D1:1600, D2:820,  L2:780},
+  {n:"铁木×1.6米(大)",   D1:1600,D2:990, L2:880},
+  {n:"铁木×1.6米(特大)", D1:1600,D2:1140,L2:880},
+  {n:"铁木×1.8米",        D1:1800,D2:890, L2:880},
+  {n:"铁木×1.8米(大)",    D1:1800,D2:1140,L2:980},
+  {n:"铁木×1.8米(特大)",  D1:1800,D2:1280,L2:1080},
+  {n:"铁木×2米(大)",      D1:2000,D2:990, L2:980},
+  {n:"铁木×2米(特大)",    D1:2000,D2:1280,L2:1080},
+  {n:"铁木×2.2米",        D1:2200,D2:1140,L2:1080},
+  {n:"铁木×2.4米",        D1:2400,D2:1280,L2:1180},
+  {n:"铁木×2.5米",        D1:2500,D2:1380,L2:1280},
+  {n:"铁木×2.6米",        D1:2600,D2:1380,L2:1280},
+  {n:"铁木×2.8米",        D1:2800,D2:1380,L2:1470},
+];
+function one(s,d,ff){
+  const y1=Math.round(d*1.5);
+  const cs=Math.floor((s.D1-s.D2-2*y1)/(2*d));
+  const qs=Math.floor(ff*s.L2/d);
+  const len=(cs>0&&qs>0)?Math.floor(Math.PI*cs*qs*(s.D2+cs*d)/1000):0;
+  const v3=+(Math.PI*(s.D1**2-s.D2**2)/4*s.L2/1e6).toFixed(1);
+  return{len,v3,y1,cs,qs};
+}
+function isMobile(){return window.innerWidth<=700;}
+function toggleDrawer(){
+  const s=document.getElementById('sidebar');
+  const o=document.getElementById('overlay');
+  const open=s.classList.toggle('open');
+  o.classList.toggle('open',open);
+}
+function closeDrawer(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+function calc(){
+  const d=parseFloat(document.getElementById('diam').value);
+  const ff=parseFloat(document.getElementById('ff').value);
+  const tStr=document.getElementById('target').value.trim();
+  const errEl=document.getElementById('err');
+  errEl.textContent='';
+  if(!d||d<=0){errEl.textContent='ERR: 线缆外径必须 > 0';return false;}
+  if(isNaN(ff)||ff<0.5||ff>1){errEl.textContent='ERR: 容积系数范围 0.50~1.00';return false;}
+  const target=tStr?parseFloat(tStr):null;
+  if(target!==null&&(isNaN(target)||target<=0)){errEl.textContent='ERR: 目标长度必须 > 0';return false;}
+
+  const res=SP.map(s=>({name:s.n,...one(s,d,ff)}));
+  let best=-1;
+  if(target!==null){best=res.findIndex(r=>r.len>=target);if(best===-1)best=res.length-1;}
+  const maxLen=Math.max(...res.map(r=>r.len));
+  const y1=Math.round(d*1.5);
+
+  document.getElementById('empty').style.display='none';
+  const rEl=document.getElementById('result');
+  rEl.style.display='flex';
+  document.getElementById('formula-sec').style.display='block';
+
+  let mh=`
+    <div class="metric"><div class="m-lbl">外径</div><div class="m-val">${d}<span class="m-unit">mm</span></div></div>
+    <div class="metric"><div class="m-lbl">最大容量</div><div class="m-val">${maxLen.toLocaleString()}<span class="m-unit">m</span></div></div>
+    <div class="metric"><div class="m-lbl">余量</div><div class="m-val">${y1}<span class="m-unit">mm</span></div></div>`;
+  if(target!==null){
+    mh+=`<div class="metric"><div class="m-lbl">目标长度</div><div class="m-val">${target.toLocaleString()}<span class="m-unit">m</span></div></div>`;
+  }else{
+    mh+=`<div class="metric"><div class="m-lbl">容积系数</div><div class="m-val">${ff}</div></div>`;
+  }
+  document.getElementById('metrics').innerHTML=mh;
+
+  document.getElementById('tbody').innerHTML=res.map((r,i)=>{
+    const hl=i===best;
+    return`<tr class="${hl?'hl':''}">
+      <td style="color:var(--text3);font-size:12px">${String(i+1).padStart(2,'0')}</td>
+      <td class="spool-n">${r.name}${hl?'<span class="tag-r">REC</span>':''}</td>
+      <td class="${r.len>0?'v-acc':'v-zer'}">${r.len>0?r.len.toLocaleString()+' m':'—'}</td>
+      <td>${r.cs}</td>
+      <td>${r.qs}</td>
+      <td style="color:var(--text3)">${r.v3} dm³</td>
+    </tr>`;
+  }).join('');
+  return true;
+}
+function calcAndClose(){
+  const ok=calc();
+  if(ok&&isMobile())closeDrawer();
+}
+function resetAll(){
+  ['diam','target'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ff').value='0.95';
+  document.getElementById('err').textContent='';
+  document.getElementById('empty').style.display='flex';
+  document.getElementById('result').style.display='none';
+  document.getElementById('formula-sec').style.display='none';
+}
+document.querySelectorAll('input').forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')calcAndClose();}));
+</script>
+</body>
+</html>
